@@ -1,0 +1,125 @@
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+from keras.models import Sequential
+from keras.layers import Dense, LSTM
+
+# Set the path to the directory where you want to create the files
+
+directory = '/content/drive/MyDrive/'
+
+def momentum_trading(data):
+    """
+    This function calculates the momentum of an asset and returns a signal
+    to buy or sell the asset.
+
+    Args:
+        data: A pandas DataFrame containing the asset price history.
+
+    Returns:
+        A pandas DataFrame containing the momentum signal and the trading decision.
+    """
+
+    # Calculate the momentum of the asset.
+    momentum = data['Close'].pct_change(1)
+
+    # Create a signal column to indicate whether to buy or sell the asset.
+    signal = np.where(momentum > 0, 1, -1)
+
+    # Create a trading decision column to indicate whether to enter or exit the trade.
+    trading_decision = np.where(signal != 0, 1, 0)
+
+    return pd.DataFrame({'momentum': momentum, 'signal': signal, 'trading_decision': trading_decision})
+
+def data_preparation(prices):
+    """
+    This function prepares the data for training the stock price prediction model.
+
+    Args:
+        prices: A pandas DataFrame containing the asset price history.
+
+    Returns:
+        A NumPy array containing the closing prices.
+    """
+
+    # Remove the 'Adj Close' and 'Volume' columns.
+    prices = prices[['Open', 'High', 'Low', 'Close']]
+
+    # Scale the data to the range [0, 1].
+    scaler = MinMaxScaler(feature_range=(0, 1))
+    scaled_prices = scaler.fit_transform(prices)
+
+    # Create the closing prices array.
+    closing_prices = scaled_prices[:, 3]
+
+    # Return the closing prices array.
+    return closing_prices
+
+
+def train_stock_price_prediction_model(closing_prices):
+    """
+    This function trains a stock price prediction model.
+
+    Args:
+        closing_prices: A NumPy array containing the closing prices.
+
+    Returns:
+        A Keras model that can be used to predict stock prices.
+    """
+
+    # Split the data into training and testing sets.
+    train_data = closing_prices[:-200]
+    test_data = closing_prices[-200:]
+
+    # Reshape the data to have two dimensions.
+    train_data = np.reshape(train_data, (train_data.shape[0], 1))
+    test_data = np.reshape(test_data, (test_data.shape[0], 1))
+
+    # Create the training and testing sets.
+    x_train, y_train = train_data[:-1], train_data[1:]
+    x_test, y_test = test_data[:-1], test_data[1:]
+
+    # Create the model.
+    model = Sequential()
+    model.add(LSTM(128, activation='tanh', input_shape=(x_train.shape[1],)))
+    model.add(Dense(1))
+
+    # Compile the model.
+    model.compile(loss='mse', optimizer='adam')
+
+    # Train the model.
+    model.fit(x_train, y_train, epochs=100, batch_size=32)
+
+    # Evaluate the model on the test set.
+    loss, accuracy = model.evaluate(x_test, y_test)
+    print('Test loss:', loss)
+    print('Test accuracy:', accuracy)
+    print('Test period:', y_test.shape[0])
+
+    # Make predictions for the future prices.
+    future_prices = model.predict(x_test)
+
+    return model, future_prices
+
+
+if __name__ == '__main__':
+    # Read the prices data from a CSV file.
+    prices = pd.read_csv(directory + 'prices.csv')
+
+    # Prepare the data.
+    closing_prices = data_preparation(prices)
+
+    # Train the model and make predictions for the future prices.
+    model, future_prices = train_stock_price_prediction_model(closing_prices)
+
+    # Print the test loss, accuracy, and test period.
+    print('Test loss:', loss)
+    print('Test accuracy:', accuracy)
+    print('Test period:', y_test.shape[0])
+
+    # Plot the actual and predicted prices.
+    plt.plot(y_test, label='Actual')
+    plt.plot(future_prices, label='Predicted')
+    plt.legend()
+    plt.show()
+
